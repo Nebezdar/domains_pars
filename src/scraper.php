@@ -44,41 +44,45 @@ foreach ($domains as $domain) {
             'emails' => []
         ];
 
+        // Поиск контактной информации на текущей странице
         echo "Поиск телефонов...\n";
-        // Пробуем более общие селекторы
         $phone_elements = $driver->findElements(WebDriverBy::cssSelector('a[href^="tel:"]'));
-        echo "Найдено телефонов: " . count($phone_elements) . "\n";
-        
         foreach ($phone_elements as $phone_element) {
-            $phone = $phone_element->getText();
-            $contacts['phones'][] = $phone;
-            echo "Найден телефон: " . $phone . "\n";
+            $phone = trim($phone_element->getText());
+            if (!empty($phone) && !in_array($phone, $contacts['phones'])) {
+                $contacts['phones'][] = $phone;
+                echo "Найден телефон: " . $phone . "\n";
+            }
         }
 
         echo "Поиск email адресов...\n";
-        // Пробуем более общие селекторы для email
         $email_elements = $driver->findElements(WebDriverBy::cssSelector('a[href^="mailto:"]'));
-        echo "Найдено email адресов: " . count($email_elements) . "\n";
-        
         foreach ($email_elements as $email_element) {
-            $email = $email_element->getText();
-            $contacts['emails'][] = $email;
-            echo "Найден email: " . $email . "\n";
+            $email = trim($email_element->getText());
+            if (!empty($email) && !in_array($email, $contacts['emails'])) {
+                $contacts['emails'][] = $email;
+                echo "Найден email: " . $email . "\n";
+            }
         }
 
-        // Если не нашли контакты, попробуем поискать по тексту
-        if (empty($contacts['phones']) && empty($contacts['emails'])) {
-            echo "Поиск контактов по тексту...\n";
-            $content = $driver->findElement(WebDriverBy::tagName('body'))->getText();
-            
-            // Поиск телефонов по шаблону
-            if (preg_match_all('/\+7[\s\-\(]?\d{3}[\s\-\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}/', $content, $matches)) {
-                $contacts['phones'] = $matches[0];
+        // Поиск по тексту на текущей странице
+        $content = $driver->findElement(WebDriverBy::tagName('body'))->getText();
+        
+        if (preg_match_all('/\+7[\s\-\(]?\d{3}[\s\-\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}/', $content, $matches)) {
+            foreach ($matches[0] as $phone) {
+                $phone = trim($phone);
+                if (!empty($phone) && !in_array($phone, $contacts['phones'])) {
+                    $contacts['phones'][] = $phone;
+                }
             }
-            
-            // Поиск email по шаблону
-            if (preg_match_all('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $content, $matches)) {
-                $contacts['emails'] = $matches[0];
+        }
+        
+        if (preg_match_all('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $content, $matches)) {
+            foreach ($matches[0] as $email) {
+                $email = trim($email);
+                if (!empty($email) && !in_array($email, $contacts['emails'])) {
+                    $contacts['emails'][] = $email;
+                }
             }
         }
 
