@@ -25,6 +25,10 @@ $capabilities->setCapability(ChromeOptions::CAPABILITY_W3C, $chromeOptions);
 $driver = RemoteWebDriver::create($host, $capabilities);
 $driver->manage()->window()->maximize();
 
+// Устанавливаем таймауты
+$driver->manage()->timeouts()->pageLoadTimeout(30); // 30 секунд на загрузку страницы
+$driver->manage()->timeouts()->implicitlyWait(10);  // 10 секунд на поиск элементов
+
 // Определяем константу на уровне файла, до цикла
 const MAX_PAGES_PER_SITE = 100;
 
@@ -33,12 +37,39 @@ $logFile = __DIR__ . '/parsing_log.txt';
 $startTime = date('Y-m-d H:i:s');
 file_put_contents($logFile, "=== Начало парсинга: {$startTime} ===\n", FILE_APPEND);
 
+// Добавим массив запрещенных расширений
+$excluded_extensions = [
+    // Изображения
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico',
+    // Документы
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'csv',
+    // Архивы
+    'zip', 'rar', '7z', 'tar', 'gz',
+    // Аудио
+    'mp3', 'wav', 'ogg', 'wma', 'm4a',
+    // Видео
+    'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm',
+    // Другие
+    'exe', 'dll', 'iso', 'apk', 'dmg'
+];
+
 foreach ($domains as $domain) {
     try {
         echo "Парсинг домена: " . $domain['domain_name'] . "\n";
         
-        if (!@file_get_contents('https://' . $domain['domain_name'])) {
-            echo "Сайт {$domain['domain_name']} недоступен\n";
+        // Проверяем доступность сайта через cURL
+        $ch = curl_init('https://' . $domain['domain_name']);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode >= 400) {
+            echo "Сайт {$domain['domain_name']} недоступен (HTTP код: $httpCode)\n";
             continue;
         }
         
@@ -144,6 +175,12 @@ foreach ($domains as $domain) {
                             continue;
                         }
                         
+                        // Проверяем расширение файла
+                        $path_info = pathinfo(strtolower($href));
+                        if (isset($path_info['extension']) && in_array($path_info['extension'], $excluded_extensions)) {
+                            continue;
+                        }
+                        
                         // Обработка относительных ссылок
                         if (strpos($href, '/') === 0) {
                             $href = 'https://' . $domain['domain_name'] . $href;
@@ -155,6 +192,12 @@ foreach ($domains as $domain) {
                         // Обработка относительных ссылок без начального слеша
                         elseif (strpos($href, 'http') !== 0) {
                             $href = 'https://' . $domain['domain_name'] . '/' . $href;
+                        }
+                        
+                        // Проверяем расширение файла после формирования полного URL
+                        $path_info = pathinfo(strtolower($href));
+                        if (isset($path_info['extension']) && in_array($path_info['extension'], $excluded_extensions)) {
+                            continue;
                         }
                         
                         // Проверяем, что ссылка относится к текущему домену
